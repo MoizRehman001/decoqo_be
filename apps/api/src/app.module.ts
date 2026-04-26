@@ -23,6 +23,7 @@ import { AdminModule } from '@modules/admin/admin.module';
 import { RatingModule } from '@modules/rating/rating.module';
 import { StorageModule } from '@modules/storage/storage.module';
 import { NegotiationModule } from './modules/negotiation/negotiation.module';
+import { CommissionModule } from './modules/commission/commission.module';
 import appConfig from '@config/app.config';
 import databaseConfig from '@config/database.config';
 import redisConfig from '@config/redis.config';
@@ -91,6 +92,7 @@ import razorpayConfig from '@config/razorpay.config';
     ChatModule,
     AdminModule,
     RatingModule,
+    CommissionModule,
   ],
 })
 export class AppModule {}

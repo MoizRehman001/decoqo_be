@@ -387,4 +387,45 @@ export class BoqService {
     if (project?.customerId !== customer.id) throw new ForbiddenException();
     return boq;
   }
+
+  // ── BOQ PDF Settings (admin-controlled) ───────────────────────────────────
+
+  async getPdfSettings() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db = this.prisma as any;
+    const settings = await db.boqPdfSettings?.findFirst({
+      where: { isActive: true },
+      orderBy: { updatedAt: 'desc' },
+    });
+    if (settings) return settings;
+
+    return db.boqPdfSettings.create({
+      data: {
+        watermarkText: 'DECOQO CONFIDENTIAL',
+        watermarkOpacity: 0.08,
+        watermarkAngle: -45,
+        showClientName: true,
+        showTimestamp: true,
+        isActive: true,
+      },
+    });
+  }
+
+  async updatePdfSettings(
+    dto: {
+      watermarkText?: string;
+      watermarkOpacity?: number;
+      watermarkAngle?: number;
+      showClientName?: boolean;
+      showTimestamp?: boolean;
+    },
+    adminId: string,
+  ) {
+    const existing = await this.getPdfSettings();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (this.prisma as any).boqPdfSettings.update({
+      where: { id: existing.id },
+      data: { ...dto, updatedBy: adminId },
+    });
+  }
 }

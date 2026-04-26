@@ -268,6 +268,7 @@ model VendorProfile {
   kyc         VendorKyc?
   bids        Bid[]
   boqs        BoqHeader[]
+  stats       DesignerStats?
 
   @@index([city, isApproved])
   @@index([kycStatus])
@@ -887,6 +888,75 @@ model Rating {
   @@unique([projectId, raterId])
   @@index([ratedId])
   @@map("ratings")
+}
+
+// ─────────────────────────────────────────────
+// COMMISSION ENGINE
+// ─────────────────────────────────────────────
+
+enum CommissionPolicyType {
+  PROJECT_COUNT
+  TIME_RANGE
+  AMOUNT_RANGE
+  CUSTOM_OVERRIDE
+}
+
+model CommissionPolicy {
+  id                    String               @id @default(uuid())
+  name                  String
+  description           String?
+  type                  CommissionPolicyType
+  priority              Int                  @default(0)
+  isActive              Boolean              @default(true)
+  /// JSON: { projectCountLessThan?, projectCountGreaterThan?, amountLessThan?, amountGreaterThan?, startDate?, endDate? }
+  conditions            Json
+  /// JSON: { commissionPercent: number, platformFeePercent?: number }
+  actions               Json
+  /// Optional: restrict to specific vendor IDs
+  applicableDesignerIds Json                 @default("[]")
+  /// Optional: restrict to specific cities
+  applicableCities      Json                 @default("[]")
+  /// Optional: restrict to specific states
+  applicableStates      Json                 @default("[]")
+  createdBy             String
+  updatedBy             String?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  @@index([isActive, priority])
+  @@index([type, isActive])
+  @@map("commission_policies")
+}
+
+model DesignerStats {
+  id            String   @id @default(uuid())
+  designerId    String   @unique
+  totalProjects Int      @default(0)
+  totalGmvPaise BigInt   @default(0)
+  rating        Float?
+  updatedAt     DateTime @updatedAt
+
+  vendor VendorProfile @relation(fields: [designerId], references: [id])
+
+  @@map("designer_stats")
+}
+
+// ─────────────────────────────────────────────
+// BOQ PDF SETTINGS
+// ─────────────────────────────────────────────
+
+model BoqPdfSettings {
+  id               String   @id @default(uuid())
+  watermarkText    String   @default("DECOQO CONFIDENTIAL")
+  watermarkOpacity Float    @default(0.08)
+  watermarkAngle   Int      @default(-45)
+  showClientName   Boolean  @default(true)
+  showTimestamp    Boolean  @default(true)
+  isActive         Boolean  @default(true)
+  updatedBy        String?
+  updatedAt        DateTime @updatedAt
+
+  @@map("boq_pdf_settings")
 }
 
 // ─────────────────────────────────────────────

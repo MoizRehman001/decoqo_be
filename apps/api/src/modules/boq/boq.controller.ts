@@ -15,6 +15,7 @@ import { UserRole } from '@prisma/client';
 import { BoqService } from './boq.service';
 import { AddBoqItemDto } from './dto/add-boq-item.dto';
 import { RaiseVariationDto } from './dto/raise-variation.dto';
+import { UpdateBoqPdfSettingsDto } from './dto/boq-pdf-settings.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -166,5 +167,24 @@ export class BoqController {
   @ApiOperation({ summary: 'Generate and download BOQ quotation PDF' })
   generatePdf(@Param('id') boqId: string, @CurrentUser() user: JwtPayload) {
     return this.boqService.generatePdf(boqId, user.sub);
+  }
+
+  // ── Admin: BOQ PDF Settings ────────────────────────────────────────────────
+
+  @Get('admin/boq/pdf-settings')
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: '[ADMIN] Get current BOQ PDF watermark settings' })
+  getPdfSettings() {
+    return this.boqService.getPdfSettings();
+  }
+
+  @Patch('admin/boq/pdf-settings')
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: '[ADMIN] Update BOQ PDF watermark and display settings' })
+  updatePdfSettings(
+    @Body() dto: UpdateBoqPdfSettingsDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.boqService.updatePdfSettings(dto, user.sub);
   }
 }

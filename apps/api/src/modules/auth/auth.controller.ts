@@ -395,14 +395,22 @@ and the same generic error is returned for any failure.
     return { accessToken: result.accessToken, expiresIn: result.expiresIn };
   }
 
+  @Public()
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Logout' })
+  @ApiOperation({ summary: 'Logout — revokes refresh token and clears cookie' })
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const refreshToken = req.cookies?.['refresh_token'] as string | undefined;
-    if (refreshToken) await this.authService.logout(refreshToken);
-    res.clearCookie('refresh_token');
+    if (refreshToken) {
+      try {
+        await this.authService.logout(refreshToken);
+      } catch {
+        // Ignore errors — always clear the cookie regardless
+      }
+    }
+    res.clearCookie('refresh_token', { path: '/api/v1/auth/refresh' });
+    res.clearCookie('refresh_token', { path: '/' });
     return { loggedOut: true };
   }
 

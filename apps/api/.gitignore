@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment files — NEVER commit these
+.env
+.env.local
+.env.dev
+.env.test
+.env.uat
+.env.prod
+
+# Only this file is safe to commit (no real secrets)
+# .env.example is intentionally NOT ignored
+
+# Logs
+logs/
+*.log
+
+# Coverage
+coverage/
+
+# Prisma generated
+prisma/generated/
+
+# OS
+.DS_Store
+Thumbs.db

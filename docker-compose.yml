@@ -1,0 +1,111 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: decoqo_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: decoqo_dev
+      POSTGRES_USER: decoqo
+      POSTGRES_PASSWORD: decoqo_dev_pass
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U decoqo -d decoqo_dev']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: decoqo_redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.dev
+    container_name: decoqo_api
+    restart: unless-stopped
+    ports:
+      - '3001:3001'
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      DATABASE_URL: postgresql://decoqo:decoqo_dev_pass@postgres:5432/decoqo_dev
+      REDIS_URL: redis://redis:6379
+      MODERATION_SERVICE_URL: http://moderation:8000
+    env_file:
+      - ./apps/api/.env
+    volumes:
+      - ./apps/api/src:/app/src
+      - ./apps/api/prisma:/app/prisma
+      - api_logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      moderation:
+        condition: service_healthy
+
+  moderation:
+    build:
+      context: ./apps/moderation
+      dockerfile: Dockerfile
+    container_name: decoqo_moderation
+    restart: unless-stopped
+    ports:
+      - '8000:8000'
+    environment:
+      ENVIRONMENT: development
+      LOG_LEVEL: debug
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8000/health']
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # Log aggregation (VPS)
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: decoqo_loki
+    restart: unless-stopped
+    ports:
+      - '3100:3100'
+    volumes:
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: decoqo_grafana
+    restart: unless-stopped
+    ports:
+      - '3030:3000'
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: decoqo_grafana
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - loki
+
+volumes:
+  postgres_data:
+  redis_data:
+  api_logs:
+  loki_data:
+  grafana_data:

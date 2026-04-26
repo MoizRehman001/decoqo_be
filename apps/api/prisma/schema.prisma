@@ -1,0 +1,933 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+enum UserRole {
+  CUSTOMER
+  VENDOR
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
+  PENDING_VERIFICATION
+}
+
+enum KycStatus {
+  NOT_STARTED
+  PENDING
+  APPROVED
+  REJECTED
+  RESUBMIT_REQUIRED
+}
+
+enum ProjectStatus {
+  DRAFT
+  AI_GENERATED
+  DESIGN_LOCKED
+  BIDDING_OPEN
+  VENDOR_SELECTED
+  MILESTONES_LOCKED
+  EXECUTION_ACTIVE
+  COMPLETED
+  CLOSED
+  CANCELLED
+}
+
+enum ProjectType {
+  RESIDENTIAL
+  COMMERCIAL
+  OFFICE
+}
+
+enum SpaceType {
+  RESIDENTIAL
+  COMMERCIAL
+  OFFICE
+  FACTORY
+  RETAIL
+  HOSPITALITY
+  OTHER
+}
+
+enum PriorityMode {
+  BUDGET_FIRST
+  BALANCED
+  DESIGN_FIRST
+}
+
+enum BudgetFlexibility {
+  STRICT
+  FLEXIBLE_10
+  FLEXIBLE_15
+}
+
+enum DesignStatus {
+  GENERATED
+  LOCKED
+}
+
+enum BidStatus {
+  SUBMITTED
+  SHORTLISTED
+  SELECTED
+  REJECTED
+  WITHDRAWN
+}
+
+enum MilestoneStatus {
+  DRAFT
+  LOCKED
+  PENDING_FUNDING
+  FUNDED
+  IN_PROGRESS
+  SUBMITTED
+  APPROVED
+  DISPUTED
+  RELEASED
+  ADJUSTED
+  REFUNDED
+}
+
+enum BoqStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  LOCKED
+  ARCHIVED
+}
+
+enum VariationType {
+  POSITIVE
+  NEGATIVE
+}
+
+enum VariationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REVISION_REQUESTED
+}
+
+enum EscrowStatus {
+  PENDING_FUNDING
+  FUNDED
+  HELD
+  RELEASED
+  PARTIALLY_RELEASED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  CREATED
+  CAPTURED
+  FAILED
+  REFUNDED
+}
+
+enum DisputeStatus {
+  OPEN
+  EVIDENCE_COLLECTION
+  ADMIN_REVIEW
+  DECIDED
+  CLOSED
+}
+
+enum DisputeDecision {
+  FULL_RELEASE
+  PARTIAL_RELEASE
+  FULL_REFUND
+}
+
+enum ChatMessageType {
+  TEXT
+  IMAGE
+  DOCUMENT
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  PUSH
+}
+
+enum NegotiationStatus {
+  OPEN
+  CONFIRMED
+  CLOSED
+}
+
+enum TimelineEventType {
+  PROJECT_CREATED
+  DESIGN_GENERATED
+  DESIGN_LOCKED
+  PROJECT_PUBLISHED
+  BID_SUBMITTED
+  VENDOR_SELECTED
+  MILESTONES_LOCKED
+  BOQ_SUBMITTED
+  BOQ_APPROVED
+  BOQ_LOCKED
+  VARIATION_RAISED
+  VARIATION_APPROVED
+  VARIATION_REJECTED
+  ESCROW_FUNDED
+  MILESTONE_STARTED
+  MILESTONE_SUBMITTED
+  MILESTONE_APPROVED
+  MILESTONE_DISPUTED
+  ESCROW_RELEASED
+  ESCROW_REFUNDED
+  DISPUTE_OPENED
+  DISPUTE_DECIDED
+  DISPUTE_CLOSED
+  PROJECT_COMPLETED
+  PROJECT_CLOSED
+  ADMIN_ACTION
+}
+
+// ─────────────────────────────────────────────
+// USERS AND IDENTITY
+// ─────────────────────────────────────────────
+
+model User {
+  id                String     @id @default(uuid())
+  email             String?    @unique
+  phone             String?    @unique
+  passwordHash      String?
+  role              UserRole
+  status            UserStatus @default(PENDING_VERIFICATION)
+  emailVerified     Boolean    @default(false)
+  phoneVerified     Boolean    @default(false)
+  totpSecret        String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  deletedAt         DateTime?
+
+  customerProfile   CustomerProfile?
+  vendorProfile     VendorProfile?
+  sessions          UserSession[]
+  policyAcceptances UserPolicyAcceptance[]
+  ratingsGiven      Rating[]              @relation("RaterUser")
+  ratingsReceived   Rating[]              @relation("RatedUser")
+  adminActions      AdminAction[]
+
+  @@index([email])
+  @@index([phone])
+  @@index([role, status])
+  @@map("users")
+}
+
+model CustomerProfile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  displayName String
+  city        String?
+  avatarUrl   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User      @relation(fields: [userId], references: [id])
+  projects    Project[]
+
+  @@map("customer_profiles")
+}
+
+model VendorProfile {
+  id                      String    @id @default(uuid())
+  userId                  String    @unique
+  businessName            String
+  displayName             String
+  city                    String
+  serviceAreas            String[]
+  categories              String[]
+  portfolioUrls           String[]
+  bio                     String?
+  websiteUrl              String?
+  kycStatus               KycStatus @default(NOT_STARTED)
+  isApproved              Boolean   @default(false)
+  averageRating           Float?
+  totalProjects           Int       @default(0)
+  razorpayLinkedAccountId String?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  user        User       @relation(fields: [userId], references: [id])
+  kyc         VendorKyc?
+  bids        Bid[]
+  boqs        BoqHeader[]
+
+  @@index([city, isApproved])
+  @@index([kycStatus])
+  @@map("vendor_profiles")
+}
+
+model VendorKyc {
+  id                  String    @id @default(uuid())
+  vendorId            String    @unique
+  panNumber           String?
+  panVerified         Boolean   @default(false)
+  panVerifiedAt       DateTime?
+  bankAccountNumber   String?
+  bankIfsc            String?
+  bankVerified        Boolean   @default(false)
+  bankVerifiedAt      DateTime?
+  businessProofUrl    String?
+  aadhaarNumber       String?
+  aadhaarVerified     Boolean   @default(false)
+  kycStatus           KycStatus @default(NOT_STARTED)
+  rejectionReason     String?
+  reviewedBy          String?
+  reviewedAt          DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  vendor VendorProfile @relation(fields: [vendorId], references: [id])
+
+  @@map("vendor_kyc")
+}
+
+model UserSession {
+  id           String    @id @default(uuid())
+  userId       String
+  refreshToken String    @unique
+  deviceInfo   String?
+  ipAddress    String?
+  expiresAt    DateTime
+  createdAt    DateTime  @default(now())
+  revokedAt    DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([refreshToken])
+  @@map("user_sessions")
+}
+
+model PolicyVersion {
+  id          String   @id @default(uuid())
+  type        String
+  version     String
+  content     String
+  effectiveAt DateTime
+  createdAt   DateTime @default(now())
+
+  acceptances UserPolicyAcceptance[]
+
+  @@index([type, effectiveAt])
+  @@map("policy_versions")
+}
+
+model UserPolicyAcceptance {
+  id              String   @id @default(uuid())
+  userId          String
+  policyVersionId String
+  acceptedAt      DateTime @default(now())
+  ipAddress       String?
+  userAgent       String?
+
+  user          User          @relation(fields: [userId], references: [id])
+  policyVersion PolicyVersion @relation(fields: [policyVersionId], references: [id])
+
+  @@unique([userId, policyVersionId])
+  @@map("user_policy_acceptances")
+}
+
+// ─────────────────────────────────────────────
+// PROJECTS
+// ─────────────────────────────────────────────
+
+model Project {
+  id                String             @id @default(uuid())
+  customerId        String
+  title             String
+  city              String
+  pincode           String?
+  projectType       ProjectType        @default(RESIDENTIAL)
+  spaceType         SpaceType?
+  status            ProjectStatus      @default(DRAFT)
+  description       String?
+  budgetMin         Int?
+  budgetMax         Int?
+  budgetFlexibility BudgetFlexibility?
+  timelineWeeks     Int?
+  priorityMode      PriorityMode?
+  notes             String?
+  publishedAt       DateTime?
+  biddingExpiresAt  DateTime?
+  completedAt       DateTime?
+  closedAt          DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  deletedAt         DateTime?
+
+  customer          CustomerProfile      @relation(fields: [customerId], references: [id])
+  rooms             Room[]
+  floorPlans        FloorPlan[]
+  aiDesigns         AiDesign[]
+  lockedDesign      AiDesign?            @relation("LockedDesign", fields: [lockedDesignId], references: [id])
+  lockedDesignId    String?              @unique
+  bids              Bid[]
+  selectedBid       Bid?                 @relation("SelectedBid", fields: [selectedBidId], references: [id])
+  selectedBidId     String?              @unique
+  milestones        Milestone[]
+  boqHeaders        BoqHeader[]
+  disputes          Dispute[]
+  chatThreads       ChatThread[]
+  timelineEvents    TrustTimelineEvent[]
+  ratings           Rating[]
+  negotiationThread NegotiationThread?
+
+  @@index([customerId, status])
+  @@index([city, status])
+  @@index([status, publishedAt])
+  @@map("projects")
+}
+
+model Room {
+  id        String   @id @default(uuid())
+  projectId String
+  name      String
+  lengthCm  Int
+  widthCm   Int
+  heightCm  Int
+  notes     String?
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@index([projectId])
+  @@map("rooms")
+}
+
+model FloorPlan {
+  id         String   @id @default(uuid())
+  projectId  String
+  fileUrl    String
+  fileName   String
+  fileSizeKb Int
+  mimeType   String
+  uploadedAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@index([projectId])
+  @@map("floor_plans")
+}
+
+model AiDesign {
+  id              String       @id @default(uuid())
+  projectId       String
+  themeText       String
+  styleFilters    Json
+  referenceUrls   String[]
+  generatedImages String[]
+  status          DesignStatus @default(GENERATED)
+  lockedAt        DateTime?
+  promptVersion   String?
+  replicateJobId  String?
+  createdAt       DateTime     @default(now())
+
+  project         Project  @relation(fields: [projectId], references: [id])
+  lockedInProject Project? @relation("LockedDesign")
+
+  @@index([projectId])
+  @@map("ai_designs")
+}
+
+// ─────────────────────────────────────────────
+// BIDDING
+// ─────────────────────────────────────────────
+
+model Bid {
+  id                   String    @id @default(uuid())
+  projectId            String
+  vendorId             String
+  totalQuotePaise      Int
+  timelineWeeks        Int
+  scopeAssumptions     String
+  materialQualityLevel String
+  notes                String?
+  status               BidStatus @default(SUBMITTED)
+  submittedAt          DateTime  @default(now())
+  selectedAt           DateTime?
+  rejectedAt           DateTime?
+
+  project           Project       @relation(fields: [projectId], references: [id])
+  vendor            VendorProfile @relation(fields: [vendorId], references: [id])
+  selectedInProject Project?      @relation("SelectedBid")
+
+  @@unique([projectId, vendorId])
+  @@index([projectId, status])
+  @@index([vendorId, status])
+  @@map("bids")
+}
+
+// ─────────────────────────────────────────────
+// MILESTONES
+// ─────────────────────────────────────────────
+
+model Milestone {
+  id          String          @id @default(uuid())
+  projectId   String
+  name        String
+  description String?
+  percentage  Int
+  amountPaise Int?
+  status      MilestoneStatus @default(DRAFT)
+  sequence    Int
+  lockedAt    DateTime?
+  fundedAt    DateTime?
+  startedAt   DateTime?
+  submittedAt DateTime?
+  approvedAt  DateTime?
+  releasedAt  DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  project       Project             @relation(fields: [projectId], references: [id])
+  escrowAccount EscrowAccount?
+  dispute       Dispute?
+  chatThread    ChatThread?
+  evidenceFiles MilestoneEvidence[]
+  boqItems      BoqItem[]
+
+  @@index([projectId, status])
+  @@index([projectId, sequence])
+  @@map("milestones")
+}
+
+model MilestoneEvidence {
+  id          String   @id @default(uuid())
+  milestoneId String
+  fileUrl     String
+  fileName    String
+  fileSizeKb  Int
+  mimeType    String
+  description String?
+  uploadedAt  DateTime @default(now())
+  uploadedBy  String
+
+  milestone Milestone @relation(fields: [milestoneId], references: [id])
+
+  @@index([milestoneId])
+  @@map("milestone_evidence")
+}
+
+// ─────────────────────────────────────────────
+// BOQ
+// ─────────────────────────────────────────────
+
+model BoqHeader {
+  id              String    @id @default(uuid())
+  projectId       String
+  vendorId        String
+  currentVersion  Int       @default(1)
+  status          BoqStatus @default(DRAFT)
+  currency        String    @default("INR")
+  grandTotalPaise Int       @default(0)
+  lockedAt        DateTime?
+  submittedAt     DateTime?
+  approvedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  project    Project       @relation(fields: [projectId], references: [id])
+  vendor     VendorProfile @relation(fields: [vendorId], references: [id])
+  items      BoqItem[]
+  versions   BoqVersion[]
+  variations BoqVariation[]
+
+  @@unique([projectId, vendorId])
+  @@index([projectId, status])
+  @@map("boq_headers")
+}
+
+model BoqItem {
+  id          String   @id @default(uuid())
+  boqId       String
+  milestoneId String?
+  room        String
+  category    String
+  description String
+  material    String?
+  brand       String?
+  quantity    Float
+  unit        String
+  ratePaise   Int
+  amountPaise Int
+  notes       String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  boq       BoqHeader  @relation(fields: [boqId], references: [id])
+  milestone Milestone? @relation(fields: [milestoneId], references: [id])
+
+  @@index([boqId])
+  @@index([milestoneId])
+  @@map("boq_items")
+}
+
+model BoqVersion {
+  id            String   @id @default(uuid())
+  boqId         String
+  versionNumber Int
+  snapshotJson  Json
+  createdAt     DateTime @default(now())
+  createdBy     String
+
+  boq BoqHeader @relation(fields: [boqId], references: [id])
+
+  @@unique([boqId, versionNumber])
+  @@index([boqId])
+  @@map("boq_versions")
+}
+
+model BoqVariation {
+  id               String          @id @default(uuid())
+  boqId            String
+  type             VariationType
+  reason           String
+  deltaAmountPaise Int
+  affectedItems    Json
+  status           VariationStatus @default(PENDING)
+  raisedBy         String
+  reviewedBy       String?
+  reviewedAt       DateTime?
+  rejectionReason  String?
+  newVersionId     String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  boq BoqHeader @relation(fields: [boqId], references: [id])
+
+  @@index([boqId, status])
+  @@map("boq_variations")
+}
+
+// ─────────────────────────────────────────────
+// PAYMENTS AND ESCROW
+// ─────────────────────────────────────────────
+
+model EscrowAccount {
+  id                String       @id @default(uuid())
+  milestoneId       String       @unique
+  amountPaise       Int
+  status            EscrowStatus @default(PENDING_FUNDING)
+  razorpayOrderId   String?      @unique
+  razorpayPaymentId String?
+  fundedAt          DateTime?
+  heldAt            DateTime?
+  releasedAt        DateTime?
+  refundedAt        DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  milestone    Milestone           @relation(fields: [milestoneId], references: [id])
+  transactions EscrowTransaction[]
+
+  @@index([status])
+  @@map("escrow_accounts")
+}
+
+model EscrowTransaction {
+  id                 String    @id @default(uuid())
+  escrowAccountId    String
+  type               String
+  amountPaise        Int
+  razorpayTransferId String?
+  razorpayRefundId   String?
+  idempotencyKey     String    @unique
+  status             String
+  metadata           Json?
+  processedAt        DateTime?
+  createdAt          DateTime  @default(now())
+
+  escrowAccount EscrowAccount @relation(fields: [escrowAccountId], references: [id])
+
+  @@index([escrowAccountId])
+  @@index([idempotencyKey])
+  @@map("escrow_transactions")
+}
+
+model Payment {
+  id                String        @id @default(uuid())
+  projectId         String?
+  milestoneId       String?
+  userId            String
+  amountPaise       Int
+  currency          String        @default("INR")
+  status            PaymentStatus @default(CREATED)
+  razorpayOrderId   String?       @unique
+  razorpayPaymentId String?       @unique
+  razorpaySignature String?
+  method            String?
+  failureReason     String?
+  idempotencyKey    String        @unique
+  metadata          Json?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([userId, status])
+  @@index([razorpayOrderId])
+  @@index([idempotencyKey])
+  @@map("payments")
+}
+
+model WebhookEvent {
+  id             String    @id @default(uuid())
+  source         String
+  eventType      String
+  payload        Json
+  signature      String?
+  verified       Boolean   @default(false)
+  processed      Boolean   @default(false)
+  processedAt    DateTime?
+  error          String?
+  idempotencyKey String    @unique
+  receivedAt     DateTime  @default(now())
+
+  @@index([source, eventType])
+  @@index([processed, receivedAt])
+  @@map("webhook_events")
+}
+
+// ─────────────────────────────────────────────
+// DISPUTES
+// ─────────────────────────────────────────────
+
+model Dispute {
+  id             String           @id @default(uuid())
+  projectId      String
+  milestoneId    String           @unique
+  raisedBy       String
+  raisedByRole   UserRole
+  reason         String
+  description    String
+  status         DisputeStatus    @default(OPEN)
+  decision       DisputeDecision?
+  decisionReason String?
+  releasePaise   Int?
+  decidedBy      String?
+  decidedAt      DateTime?
+  closedAt       DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  project   Project           @relation(fields: [projectId], references: [id])
+  milestone Milestone         @relation(fields: [milestoneId], references: [id])
+  evidence  DisputeEvidence[]
+
+  @@index([status])
+  @@index([projectId])
+  @@map("disputes")
+}
+
+model DisputeEvidence {
+  id          String   @id @default(uuid())
+  disputeId   String
+  uploadedBy  String
+  fileUrl     String
+  fileName    String
+  description String?
+  uploadedAt  DateTime @default(now())
+
+  dispute Dispute @relation(fields: [disputeId], references: [id])
+
+  @@index([disputeId])
+  @@map("dispute_evidence")
+}
+
+// ─────────────────────────────────────────────
+// CHAT
+// ─────────────────────────────────────────────
+
+model ChatThread {
+  id          String   @id @default(uuid())
+  projectId   String
+  milestoneId String?  @unique
+  title       String?
+  createdAt   DateTime @default(now())
+
+  project   Project    @relation(fields: [projectId], references: [id])
+  milestone Milestone? @relation(fields: [milestoneId], references: [id])
+  messages  ChatMessage[]
+
+  @@index([projectId])
+  @@map("chat_threads")
+}
+
+model ChatMessage {
+  id         String          @id @default(uuid())
+  threadId   String
+  senderId   String
+  senderRole UserRole
+  type       ChatMessageType @default(TEXT)
+  content    String?
+  fileUrl    String?
+  fileName   String?
+  fileSizeKb Int?
+  mimeType   String?
+  isRead     Boolean         @default(false)
+  readAt     DateTime?
+  flagged    Boolean         @default(false)
+  createdAt  DateTime        @default(now())
+
+  thread ChatThread @relation(fields: [threadId], references: [id])
+
+  @@index([threadId, createdAt])
+  @@index([senderId])
+  @@map("chat_messages")
+}
+
+// ─────────────────────────────────────────────
+// NEGOTIATION
+// ─────────────────────────────────────────────
+
+model NegotiationThread {
+  id                String            @id @default(uuid())
+  projectId         String            @unique
+  status            NegotiationStatus @default(OPEN)
+  customerConfirmed Boolean           @default(false)
+  vendorConfirmed   Boolean           @default(false)
+  confirmedAt       DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  project   Project               @relation(fields: [projectId], references: [id])
+  messages  NegotiationMessage[]
+  proposals NegotiationProposal[]
+
+  @@map("negotiation_threads")
+}
+
+model NegotiationMessage {
+  id         String   @id @default(uuid())
+  threadId   String
+  senderId   String
+  senderRole UserRole
+  content    String
+  flagged    Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  thread NegotiationThread @relation(fields: [threadId], references: [id])
+
+  @@index([threadId, createdAt])
+  @@map("negotiation_messages")
+}
+
+model NegotiationProposal {
+  id              String   @id @default(uuid())
+  threadId        String
+  submittedBy     String
+  totalQuotePaise Int
+  timelineWeeks   Int
+  materialLevel   String
+  notes           String?
+  status          String   @default("PENDING")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  thread NegotiationThread @relation(fields: [threadId], references: [id])
+
+  @@index([threadId])
+  @@map("negotiation_proposals")
+}
+
+// ─────────────────────────────────────────────
+// TRUST TIMELINE
+// ─────────────────────────────────────────────
+
+model TrustTimelineEvent {
+  id        String             @id @default(uuid())
+  projectId String
+  eventType TimelineEventType
+  actorId   String?
+  actorRole UserRole?
+  metadata  Json?
+  createdAt DateTime           @default(now())
+
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@index([projectId, createdAt])
+  @@index([eventType])
+  @@map("trust_timeline_events")
+}
+
+// ─────────────────────────────────────────────
+// RATINGS
+// ─────────────────────────────────────────────
+
+model Rating {
+  id        String   @id @default(uuid())
+  projectId String
+  raterId   String
+  ratedId   String
+  score     Int
+  comment   String?
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id])
+  rater   User    @relation("RaterUser", fields: [raterId], references: [id])
+  rated   User    @relation("RatedUser", fields: [ratedId], references: [id])
+
+  @@unique([projectId, raterId])
+  @@index([ratedId])
+  @@map("ratings")
+}
+
+// ─────────────────────────────────────────────
+// ADMIN
+// ─────────────────────────────────────────────
+
+model AdminAction {
+  id         String   @id @default(uuid())
+  adminId    String
+  actionType String
+  targetType String
+  targetId   String
+  reason     String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  admin User @relation(fields: [adminId], references: [id])
+
+  @@index([adminId])
+  @@index([targetType, targetId])
+  @@index([createdAt])
+  @@map("admin_actions")
+}
+
+// ─────────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────────
+
+model NotificationLog {
+  id         String              @id @default(uuid())
+  userId     String
+  channel    NotificationChannel
+  templateId String
+  subject    String?
+  body       String
+  status     String
+  metadata   Json?
+  sentAt     DateTime?
+  createdAt  DateTime            @default(now())
+
+  @@index([userId, createdAt])
+  @@index([status])
+  @@map("notification_logs")
+}

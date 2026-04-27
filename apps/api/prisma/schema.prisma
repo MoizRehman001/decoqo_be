@@ -960,6 +960,55 @@ model BoqPdfSettings {
 }
 
 // ─────────────────────────────────────────────
+// STORAGE SETTINGS
+// ─────────────────────────────────────────────
+
+enum StorageUploadMode {
+  VM_THEN_CLOUD
+  DIRECT_CLOUD
+  VM_ONLY
+}
+
+model StorageSettings {
+  id                String            @id @default(uuid())
+  enableS3          Boolean           @default(false)
+  enableR2          Boolean           @default(true)
+  enableLocal       Boolean           @default(false)
+  uploadMode        StorageUploadMode @default(VM_THEN_CLOUD)
+  maxFileSizeBytes  BigInt            @default(10485760) // 10 MB
+  deleteAfterUpload Boolean           @default(true)
+  s3Config          Json?
+  r2Config          Json?
+  updatedBy         String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@map("storage_settings")
+}
+
+model StorageUploadLog {
+  id              String   @id @default(uuid())
+  fileKey         String
+  originalName    String
+  mimeType        String
+  sizeBytes       BigInt
+  uploadMode      String
+  s3Url           String?
+  r2Url           String?
+  localPath       String?
+  success         Boolean  @default(true)
+  errorMessage    String?
+  durationMs      Int?
+  uploadedBy      String?
+  createdAt       DateTime @default(now())
+
+  @@index([fileKey])
+  @@index([uploadedBy])
+  @@index([createdAt])
+  @@map("storage_upload_logs")
+}
+
+// ─────────────────────────────────────────────
 // ADMIN
 // ─────────────────────────────────────────────
 

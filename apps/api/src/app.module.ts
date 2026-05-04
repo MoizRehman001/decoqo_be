@@ -29,13 +29,16 @@ import databaseConfig from '@config/database.config';
 import redisConfig from '@config/redis.config';
 import awsConfig from '@config/aws.config';
 import razorpayConfig from '@config/razorpay.config';
+import { AnalyticsModule } from './analytics/analytics.module';
+import { AnalyticsService } from './analytics/analytics.service';
+import analyticsConfig from '@config/analytics.config';
 
 @Module({
   imports: [
     // ── Configuration ──────────────────────────────────────────────────────
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfig, databaseConfig, redisConfig, awsConfig, razorpayConfig],
+      load: [appConfig, databaseConfig, redisConfig, awsConfig, razorpayConfig, analyticsConfig],
       envFilePath: [
         `.env.${process.env['NODE_ENV'] ?? 'local'}`, // e.g. .env.dev, .env.test, .env.uat, .env.prod
         '.env.local',                                  // local overrides (never committed)
@@ -76,6 +79,7 @@ import razorpayConfig from '@config/razorpay.config';
     StorageModule,
     NotificationModule,
     TimelineModule,
+    AnalyticsModule,
 
     // ── Domain Modules ────────────────────────────────────────────────────
     AuthModule,
@@ -95,4 +99,8 @@ import razorpayConfig from '@config/razorpay.config';
     CommissionModule,
   ],
 })
-export class AppModule {}
+export class AppModule {
+  constructor(private readonly analyticsService: AnalyticsService) {
+    console.log('AnalyticsService initialized'); // ✅ MUST PRINT
+  }
+}

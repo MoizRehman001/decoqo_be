@@ -14,6 +14,8 @@ import { DuplicateBidException } from '../../common/exceptions/business.exceptio
 import { inrToPaise, paiseToInr } from '../../common/utils/money.util';
 import { PaginationDto, paginate } from '../../common/dto/pagination.dto';
 
+const IS_PROD = process.env['NODE_ENV'] === 'production';
+
 const TRUST_SIGNALS = [
   'Secure escrow — pay only after work approval',
   'Locked BOQ & design protects your scope',
@@ -43,7 +45,7 @@ export class BiddingService {
       where: { userId: vendorUserId },
     });
 
-    if (!vendor.isApproved) {
+    if (!vendor.isApproved && IS_PROD) {
       throw new ForbiddenException('Vendor KYC must be approved to browse projects');
     }
 
@@ -92,7 +94,7 @@ export class BiddingService {
       where: { userId: vendorUserId },
     });
 
-    if (!vendor.isApproved) {
+    if (!vendor.isApproved && IS_PROD) {
       throw new ForbiddenException('Vendor KYC must be approved to submit bids');
     }
 

@@ -19,6 +19,7 @@ import { LoginDto } from './dto/login.dto';
 import { AdminRegisterDto } from './dto/admin-register.dto';
 import { AdminLoginDto } from './dto/admin-login.dto';
 import { OtpService } from './otp.service';
+import { track } from '../../analytics/analytics.helper';
 
 const BCRYPT_ROUNDS = 12;
 const ADMIN_BCRYPT_ROUNDS = 14; // Higher cost for admin accounts
@@ -32,7 +33,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly otpService: OtpService,
-  ) {}
+  ) { }
 
   // ── Registration ───────────────────────────────────────────────────────────
 
@@ -203,13 +204,24 @@ export class AuthService {
       },
     });
 
-    if (!user?.passwordHash) throw new UnauthorizedException('Invalid credentials');
+    if (!user?.passwordHash) {
+      track('login_failed', identifier, {
+        reason: 'invalid_credentials',
+      });
+      throw new UnauthorizedException('Invalid credentials');
+    }
     if (!await bcrypt.compare(dto.password, user.passwordHash)) throw new UnauthorizedException('Invalid credentials');
-    if (user.status === 'BANNED') throw new UnauthorizedException('Account has been banned');
+    if (user.status === 'BANNED') {
+      track('login_failed', user.id.toString(), {
+        reason: user.status.toLowerCase(),
+      });
+      throw new UnauthorizedException('Account has been banned');
+    }
     if (user.status === 'SUSPENDED') throw new UnauthorizedException('Account is suspended');
 
     if (user.status === 'PENDING_VERIFICATION') {
       await this.sendOtpToAllChannels(user.email ?? undefined, user.phone ?? undefined);
+      track('pending_verification_triggered', user.id.toString());
       throw new UnauthorizedException(
         JSON.stringify({
           code: 'PENDING_VERIFICATION',
@@ -221,7 +233,14 @@ export class AuthService {
     }
 
     if (user.role === UserRole.ADMIN || user.role === UserRole.SUPER_ADMIN) {
-      if (!dto.totpCode) throw new UnauthorizedException('TOTP code is required for admin accounts');
+      if (!dto.totpCode) {
+        track('login_success', user.id.toString(), {
+          role: user.role,
+          ip: ipAddress,
+          device: deviceInfo,
+        });
+        throw new UnauthorizedException('TOTP code is required for admin accounts');
+      }
       if (!user.totpSecret) throw new UnauthorizedException('Admin account has no TOTP configured');
       if (!this.verifyTotp(user.totpSecret, dto.totpCode)) {
         this.logger.warn({ message: 'Admin TOTP failed', userId: user.id, ipAddress });
@@ -232,7 +251,10 @@ export class AuthService {
     const profileId = user.customerProfile?.id ?? user.vendorProfile?.id ?? '';
     const displayName = user.customerProfile?.displayName ?? user.vendorProfile?.displayName ?? '';
     const tokens = await this.generateTokens(user.id, user.role, profileId, deviceInfo, ipAddress);
-
+    track('login_success', user.id.toString(), {
+      role: user.role,
+      method: user.email ? 'email' : 'phone',
+    });
     this.logger.log({ message: 'User logged in', userId: user.id, role: user.role });
     return { ...tokens, user: { id: user.id, role: user.role, displayName } };
   }
@@ -644,16 +666,25 @@ export class AuthService {
     // Role gate — same error as wrong credentials to prevent enumeration
     if (user.role !== UserRole.ADMIN && user.role !== UserRole.SUPER_ADMIN) {
       this.logger.warn({ message: 'Admin login rejected: non-admin role', userId: user.id, role: user.role, ipAddress });
+      track('admin_login_failed', user.id.toString(), {
+        reason: 'not_admin',
+      });
       throw new UnauthorizedException(GENERIC_ERROR);
     }
 
     if (user.status === 'BANNED' || user.status === 'SUSPENDED') {
       this.logger.warn({ message: 'Admin login rejected: account status', userId: user.id, status: user.status, ipAddress });
+      track('admin_login_failed', user.id.toString(), {
+        reason: user.status.toLowerCase(),
+      });
       throw new UnauthorizedException('Account is not active');
     }
 
     if (!user.totpSecret) {
       this.logger.error({ message: 'Admin account has no TOTP secret', userId: user.id });
+      track('admin_login_failed', user.id.toString(), {
+        reason: 'missing_totp_secret',
+      });
       throw new UnauthorizedException(GENERIC_ERROR);
     }
 
@@ -684,13 +715,20 @@ export class AuthService {
 
     if (!this.verifyTotp(user.totpSecret, dto.totpCode)) {
       this.logger.warn({ message: 'Admin login failed: invalid TOTP', userId: user.id, ipAddress });
+      track('admin_login_failed', user.id.toString(), {
+        reason: 'invalid_totp',
+      });
       throw new UnauthorizedException(GENERIC_ERROR);
     }
 
     const tokens = await this.generateTokens(user.id, user.role, user.id, deviceInfo, ipAddress);
-
+    track('admin_login_success', user.id.toString(), {
+      role: user.role,
+      ip: ipAddress,
+      device: deviceInfo,
+    });
     this.logger.log({ message: 'Admin login successful', userId: user.id, role: user.role, ipAddress });
-
+    console.log("====================================================================================================================================================================================")
     return {
       ...tokens,
       user: {

@@ -13,6 +13,8 @@ import { ProjectStateService } from './project-state.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { AddRoomDto } from './dto/add-room.dto';
+
+const IS_PROD = process.env['NODE_ENV'] === 'production';
 import { SetBudgetDto } from './dto/set-budget.dto';
 import { PaginationDto, paginate } from '../../common/dto/pagination.dto';
 
@@ -89,17 +91,17 @@ export class ProjectService {
       select: { serviceAreas: true, city: true, isApproved: true },
     });
 
-    if (!vendor?.isApproved) {
-      // Unapproved vendors see nothing
+    if (!vendor?.isApproved && IS_PROD) {
+      // In production, unapproved vendors see nothing
       return paginate([], 0, pagination);
     }
 
     // Match project city against vendor's serviceAreas (case-insensitive)
     // serviceAreas is an array of city strings set by the vendor
     const vendorCities = [
-      ...(vendor.serviceAreas ?? []),
-      vendor.city,
-    ].filter(Boolean).map((c) => c.toLowerCase());
+      ...(vendor?.serviceAreas ?? []),
+      vendor?.city,
+    ].filter((c): c is string => Boolean(c)).map((c) => c.toLowerCase());
 
     const [items, total] = await Promise.all([
       this.prisma.project.findMany({
